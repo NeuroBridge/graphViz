@@ -5,6 +5,7 @@ import operator
 from py2cytoscape.data.cyrest_client import CyRestClient
 import requests
 import json
+import time
 
 # Here's the main entrypoint
 parser = argparse.ArgumentParser()
@@ -41,12 +42,36 @@ basic_settings = {
     'NODE_FILL_COLOR': '#6AACB8',
     'NODE_SIZE': 5,
     'NODE_BORDER_WIDTH': 0,
-    'NODE_LABEL_COLOR': '#555555',
+    'NODE_LABEL_COLOR': '#000000',
     'EDGE_WIDTH': 1,
     'EDGE_TRANSPARENCY': 100,
     'EDGE_STROKE_UNSELECTED_PAINT': '#333333',
     'NETWORK_BACKGROUND_PAINT': '#FFFFEA'
 }
+
+# 10 entry colormap
+color_map_10 = [
+   '#9E0142',
+   '#D53E4F',
+   '#F46D43',
+   '#FDAE61',
+   '#FEE08B',
+   '#E6F598',
+   '#ABDDA4',
+   '#66C2A5',
+   '#3288BD',
+   '#5E4FA2'
+]
+
+# 6 entry colormap
+color_map_6 = [
+   '#D53E4F',
+   '#FC8D59',
+   '#FEE08B',
+   '#E6F598',
+   '#99D594',
+   '#3288BD'
+]
 neuro_style.update_defaults(basic_settings)
 cy.style.apply(neuro_style, NeuroNet)
 
@@ -68,6 +93,40 @@ viewResponse = requests.get(f"{cytoscape_url}/networks/{thisNetwork}/views")
 viewJSON = viewResponse.json()
 viewSUID = viewJSON[0]
 print(f"viewSUID is {viewSUID}")
+
+# get the list of nodes
+nodes_response = requests.get(f"{cytoscape_url}/networks/{thisNetwork}/nodes")
+print (nodes_response)
+nodes_data = nodes_response.json()
+print(f"nodes_data is {nodes_data}")
+print(len(nodes_data))
+for node in nodes_data:
+   node_data = requests.get(f"{cytoscape_url}/networks/{thisNetwork}/nodes/{node}")
+   node_data = node_data.json()
+   print(f"node_data is {node_data}")
+   nodeName = node_data['data']['name']
+   nodeSUID = node_data['data']['SUID']
+   print(f"nodeName, nodeSUID are {nodeName} {nodeSUID}")
+
+   nodeNameProp = {
+          'visualProperty': 'NODE_LABEL',
+          'value': nodeName
+    } 
+
+   nodeFontProp = {
+          'visualProperty': 'NODE_LABEL_FONT_SIZE',
+          'value': 3
+    } 
+
+   putURL = f"{cytoscape_url}/networks/{thisNetwork}/views/{viewSUID}/nodes/{nodeSUID}?bypass=true"
+   print(f"putURL for nodes {putURL}")
+   nodePropArray = []
+   nodePropArray.append(nodeNameProp)
+   nodePropArray.append(nodeFontProp)
+   formattedProps = json.dumps(nodePropArray[0], indent = 3)
+   print(f"formattedProps {formattedProps}")
+   reply = requests.put(putURL, json = nodePropArray)
+   print(f"node reply is {reply}")
 
 # get the list of edges
 edges_response = requests.get(f"{cytoscape_url}/networks/{thisNetwork}/edges")
@@ -95,6 +154,8 @@ for edge in edges_data:
 reply = requests.delete(f"{cytoscape_url}/networks/{thisNetwork}/edges/")
 print(f"delete reply is {reply}")
 
+time.sleep(0.1)
+
 for pair, thickness in edge_thickness.items():
     source, target = pair
     #print(f"found {source} {target}")
@@ -104,10 +165,6 @@ for pair, thickness in edge_thickness.items():
         "target": target,
     }
     new_edge_array.append(new_edge_data)
-
-    # Remove existing multiple edges (if any) between source and target
- #   reply = requests.delete(f"{cytoscape_url}/networks/{thisNetwork}/edges/{source},{target}")
-  #  print(f"delete reply is {reply}")
 
     # Add the new edge to the network
     reply = requests.post(f"{cytoscape_url}/networks/{thisNetwork}/edges", json = new_edge_array)
@@ -119,7 +176,6 @@ for pair, thickness in edge_thickness.items():
     visualProp = {
           "visualProperty": "EDGE_WIDTH",
           "value": thickness
-          #"value": 20
     } 
 
     visualPropArray = []
@@ -128,26 +184,17 @@ for pair, thickness in edge_thickness.items():
     conceptArray = concept_list[pair]
     conceptString = "\n".join([str(item) for item in conceptArray])
     conceptProp = {
-          "visualProperty": "EDGE_LABEL",
+          "visualProperty": "EDGE_TOOLTIP",
           "value": conceptString
     }
-    rotateProp = {
-          "visualProperty": "EDGE_LABEL_AUTOROTATE",
-          "value": True
-    }
-    sizeProp = {
-          "visualProperty": "EDGE_LABEL_FONT_SIZE",
-          "value": 2
-    }
     visualPropArray.append(conceptProp)
-    visualPropArray.append(rotateProp)
-    visualPropArray.append(sizeProp)
   
     edgeSUID = replyJSON[0]['SUID']
     putURL = f"{cytoscape_url}/networks/{thisNetwork}/views/{viewSUID}/edges/{edgeSUID}"
     print(f"putURL {putURL}")
     formattedProps = json.dumps(visualPropArray[0], indent = 3)
-    print(f"formattedProps {formattedProps}")
+   # print(f"formattedProps {formattedProps}")
 
     reply = requests.put(putURL, json = visualPropArray)
-    #print(f"thickness reply is {reply}")
+    print(f"visualProp reply is {reply}")
+    time.sleep(0.1)
